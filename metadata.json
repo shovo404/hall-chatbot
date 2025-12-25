@@ -1,0 +1,8 @@
+{
+  "name": "Hall Portal Bot",
+  "description": "A professional chatbot application with an administrative dashboard for knowledge base management through document uploads and URL integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
