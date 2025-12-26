@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Link as LinkIcon, Trash2, Plus, Type as TypeIcon, CheckCircle2, AlertCircle, RefreshCw, Database, LogOut, FileText, Key, ExternalLink } from 'lucide-react';
 import { KnowledgeItem } from '../types';
+import { validateApiKey } from '../services/geminiService';
 
 interface AdminDashboardProps {
   knowledge: KnowledgeItem[];
@@ -17,6 +18,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ knowledge, onAddKnowled
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | null, message: string }>({ type: null, message: '' });
   const [hasApiKey, setHasApiKey] = useState<boolean>(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     const checkKeyStatus = async () => {
@@ -38,6 +40,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ knowledge, onAddKnowled
       showStatus('success', 'API Key session initialized.');
     } else {
       showStatus('error', 'API Key management is not available in this environment.');
+    }
+  };
+
+  const handleVerifyKey = async () => {
+    setIsVerifying(true);
+    try {
+      const res = await validateApiKey();
+      if (res.ok) {
+        setHasApiKey(true);
+        showStatus('success', 'API Key verified successfully.');
+      } else {
+        setHasApiKey(false);
+        showStatus('error', res.message || 'Key verification failed.');
+      }
+    } catch (err) {
+      showStatus('error', 'Key verification failed.');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -162,12 +182,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ knowledge, onAddKnowled
           </div>
         </div>
         <div className="relative z-10">
-          <button 
-            onClick={handleSelectKey}
-            className="w-full md:w-auto bg-white text-slate-900 hover:bg-blue-50 px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all transform active:scale-95"
-          >
-            {hasApiKey ? 'Update API Key' : 'Configure API Key'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleSelectKey}
+              className="w-full md:w-auto bg-white text-slate-900 hover:bg-blue-50 px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all transform active:scale-95"
+            >
+              {hasApiKey ? 'Update API Key' : 'Configure API Key'}
+            </button>
+            <button
+              onClick={handleVerifyKey}
+              disabled={isVerifying}
+              className="hidden md:inline-flex bg-slate-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-slate-600"
+            >
+              {isVerifying ? 'Verifying...' : 'Verify Key'}
+            </button>
+          </div>
         </div>
       </div>
 

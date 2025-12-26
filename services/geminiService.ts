@@ -6,11 +6,12 @@ export const generateChatResponse = async (
   messages: Message[],
   knowledge: KnowledgeItem[]
 ): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey || apiKey === "undefined") {
-    console.error("Gemini API Key missing.");
-    return "### ⚠️ CONFIGURATION ERROR\nI am unable to access my processing engine. The administrator needs to configure the **API Key** in the Admin Dashboard to enable service.";
+  // Resolve the API key at runtime (prefer AI Studio session keys) and avoid embedding keys in the bundle
+  const apiKey = await resolveApiKey();
+
+  if (!apiKey || apiKey === 'undefined') {
+    console.error('Gemini API Key missing or not initialized.');
+    return "### ⚠️ CONFIGURATION ERROR\nI am unable to access the AI engine. The administrator needs to configure the **API Key** in the Admin Dashboard (select/initialize a key) to enable service.";
   }
 
   // Create a new instance right before making an API call to ensure it uses the most up-to-date API key
@@ -47,12 +48,64 @@ export const generateChatResponse = async (
     return response.text || "Synchronizing with records... please try again.";
   } catch (error: any) {
     console.error("API Error:", error);
-    
-    // Check for "Requested entity was not found" which might indicate a bad key session
-    if (error.message?.includes("not found") || error.message?.includes("API key not valid")) {
-      return "### ❌ AUTHENTICATION ERROR\nThe session API Key is invalid or has expired. Please ask the administrator to re-configure the key in the Admin Dashboard.";
+
+    const msg = error?.message || '';
+    const status = error?.status || error?.statusCode || error?.code;
+
+    if (msg.includes("not found") || msg.includes("API key not valid") || msg.includes("Invalid API key") || status === 401 || status === 403) {
+      return "### ❌ AUTHENTICATION ERROR\nThe session API Key is invalid, revoked, or expired. Please ask the administrator to re-configure the key in the Admin Dashboard.";
     }
-    
-    return "### 🛰️ CONNECTION ERROR\nA technical issue occurred while reaching the AI server. Check your internet connection or try again later.";
+
+    return "### 🛰️ CONNECTION ERROR\nA technical issue occurred while reaching the AI server. Check your logs for details and try again later.";
+  }
+};
+
+// Utility to resolve the active API key/session without leaking secrets
+async function resolveApiKey(): Promise<string | undefined> {
+  let apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (typeof window !== 'undefined') {
+    const aistudio = (window as any).aistudio;
+    if (aistudio) {
+      try {
+        if (typeof aistudio.getSelectedApiKey === 'function') {
+          const key = await aistudio.getSelectedApiKey();
+          if (key) return key;
+        }
+        if (typeof aistudio.getApiKey === 'function') {
+          const key = await aistudio.getApiKey();
+          if (key) return key;
+        }
+        if (typeof aistudio.hasSelectedApiKey === 'function') {
+          const has = await aistudio.hasSelectedApiKey();
+          if (has && apiKey) return apiKey;
+        }
+      } catch (err) {
+        // ignore and fall back to env var
+      }
+    }
+  }
+  return apiKey;
+}
+
+// Validate that the current key/session can authenticate with the Gemini API
+export const validateApiKey = async (): Promise<{ ok: boolean; message?: string }> => {
+  const key = await resolveApiKey();
+  if (!key) return { ok: false, message: 'No API key configured' };
+  try {
+    const ai = new GoogleGenAI({ apiKey: key });
+    const test = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: 'Ping',
+      config: { temperature: 0.0, maxOutputTokens: 16 },
+    });
+    if (test?.text) return { ok: true };
+    return { ok: false, message: 'Unexpected response from API' };
+  } catch (err: any) {
+    const msg = err?.message || 'Unknown error';
+    const status = err?.status || err?.statusCode || err?.code;
+    if (msg.includes('not found') || msg.includes('API key not valid') || status === 401 || status === 403) {
+      return { ok: false, message: 'Authentication failed: invalid or expired API key' };
+    }
+    return { ok: false, message: `Connection error: ${msg}` };
   }
 };

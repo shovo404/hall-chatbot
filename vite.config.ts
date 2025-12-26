@@ -16,10 +16,8 @@ export default defineConfig(({ mode }) => {
 
     plugins: [react()],
 
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
+    // Do NOT inject sensitive API keys into the client bundle. Configure keys in the Admin Dashboard or on a server-side environment.
+
 
     resolve: {
       alias: {
